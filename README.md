@@ -28,4 +28,4 @@ Happy training!
 <font size = '2' color='red'>*This was the actual goal of my work when I started.</font>
 
 
-## FYI: A copy of the dataset, these notebooks, annotations, videos input, sample video outputs, etc. are available [here](https://drive.google.com/drive/folders/1PhGNe1x4vHVVNPzkfftruOMD5HlovET5?usp=sharing).
+## FYI: A copy of the dataset, these notebooks, annotations, video inputs, sample video outputs, etc. are available [here](https://drive.google.com/drive/folders/1PhGNe1x4vHVVNPzkfftruOMD5HlovET5?usp=sharing).
