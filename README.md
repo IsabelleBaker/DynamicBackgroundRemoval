@@ -13,7 +13,7 @@ Within this repository, I have the following files:
 
 1. A Jupyter Notebook (Baker_Training_Exporting_Mask_R_CNN.ipynb) that trains Mask R-CNN model, evaluates, and then exports it to torchscript from within Google Colab.
 2. Installation Instructions (StandAlone-Install-Instructions.docx) for installing my standalone software framework.
-3. A User Interface written in wxpython for training Mask R-CNN models (Track_player_gui.py)
+3. A User Interface written in wxpython for training Mask R-CNN models (model_trainer_gui.py)
 4. A User Interface written in wxpython for using these models to remove background from video and create behavior animations/contour images compatible with Ye Labs LabGyn project. (dynamic_background_gui.py)
 5. Two support libraries I wrote to enable the above capabilities. The first (dynamic_background_remover.py) handles all of the major code for inferencing and image processing. The second (animal_tracker.py) is an animal tracking algorithm I wrote which uses a combination of IoU tracking layered on top of a distance between centers tracking method.
 6. A User Interface written in wxpython for playing back animal track files saved into pkl files during analysis (Track_player_gui.py). This UI is able to play back the highly portable pkl file that holds the outline of each animal and its path without the need for the original video.
