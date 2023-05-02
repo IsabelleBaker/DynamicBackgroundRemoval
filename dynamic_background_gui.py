@@ -822,6 +822,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 # Run the program
 if __name__ == '__main__':
     app = wx.App()
-    # DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='TEST')
-    DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='SAMPLES')
+    DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='TEST')
+    #DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='SAMPLES')
     app.MainLoop()
