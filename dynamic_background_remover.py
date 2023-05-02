@@ -1025,7 +1025,7 @@ class dynamic_background_remover:
             for tracker in self.trackers:
                 video_info = {"video_info": {},
                               'video_info': {'filename': os.path.basename(input_video_name), 'fps': frames_per_second,
-                                             'width': width, 'height': height}}
+                                             'width': self.width, 'height': self.height}}
                 filename = os.path.join(project_path,
                                         f"{self.model_things[str(tracker.class_index)]}_tracklets_"
                                         f"{os.path.split(input_video_name)[1][:-4]}_{date_time}.pkl")
