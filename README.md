@@ -16,7 +16,7 @@ Within this repository, I have the following files:
 3. A User Interface written in wxpython for training Mask R-CNN models (model_trainer_gui.py)
 4. A User Interface written in wxpython for using these models to remove background from video and create behavior animations/contour images compatible with Ye Labs LabGyn project. (dynamic_background_gui.py)
 5. Two support libraries I wrote to enable the above capabilities. The first (dynamic_background_remover.py) handles all of the major code for inferencing and image processing. The second (animal_tracker.py) is an animal tracking algorithm I wrote which uses a combination of IoU tracking layered on top of a distance between centers tracking method.
-6. A User Interface written in wxpython for playing back animal track files saved into pkl files during analysis (Track_player_gui.py). This UI is able to play back the highly portable pkl file that holds the outline of each animal and its path without the need for the original video.
+6. A User Interface written in wxpython for playing back animal track files saved into pkl files during analysis (Track_player_gui.py). This UI is able to play back the highly portable pkl file that holds the outline of each animal and its path without the need for the original video. You should also check out my "FrameGrabber" repository. It provides a way to grab frames from a video AND a way to use the track files to identiy frames that needed for model refinement. It is an alternate approach to the track player. I actually prefer to us the frame grabber for model refinement. 
 
 
 
