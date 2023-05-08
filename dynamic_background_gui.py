@@ -638,7 +638,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                         self.thing_names_path = None
                         return
                     self.model_path = file
-                    self.get_model_label.SetValue(os.path.basename(self.model_path))
+                    self.get_model_label.SetValue(os.path.basename(self.model_path)[:-3])
                 if file.endswith('.txt'):
                     if self.thing_names_path is not None:
                         dlg = wx.GenericMessageDialog(None, 'Multiple txt files were found!', caption='Error',
