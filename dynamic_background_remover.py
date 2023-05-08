@@ -385,8 +385,19 @@ class dynamic_background_remover:
                     temp_mask = model_output['masks'][z].detach().cpu().numpy().astype(np.uint8)
 
                     # Check a pixel in the mask_holder and if it is zero (black), copy the corresponding
-                    # value from the mask into it.
-                    mask_holder[int(box[1]):int(box[3]), int(box[0]):int(box[2])] += temp_mask.clip(max=1)[..., None]
+                    # value from the mask into it. This code also catches the boundary
+                    # condition at the extremes of the frame
+                    top = int(math.floor(box[1]))
+                    bottom = top + temp_mask.shape[0]
+                    if bottom > self.height:
+                        bottom = self.height
+                        top = bottom - temp_mask.shape[0]
+                    left = int(math.floor(box[0]))
+                    right = left + temp_mask.shape[1]
+                    if right > self.width:
+                        right = self.width
+                        left = right - temp_mask.shape[1]
+                    mask_holder[top:bottom, left:right] += temp_mask.clip(max=1)[..., None]
 
         # Make a true/false array out of the mask_holder numpy. True means not white
         mask_holder = mask_holder[..., :] == 0  # 255
