@@ -265,6 +265,14 @@ class dynamic_background_remover:
                             data[..., :][non_black_areas.T] = animal_class.active_tracklets['animals'][z]['color']
                             mask = Image.fromarray(data)
                             pixels = mask.load()
+                            y_max = y_min + mask.size[1]
+                            if y_max > self.height:
+                                y_max = self.height
+                                y_min = y_max - mask.size[1]
+                            x_max = x_min + mask.size[0]
+                            if x_max > self.width:
+                                x_max = self.width
+                                x_min = x_max - mask.size[0]
                             for i in range(mask.size[0]):
                                 for j in range(mask.size[1]):
                                     if holder_pixels[i + x_min, j + y_min] == (0, 0, 0):
@@ -385,7 +393,7 @@ class dynamic_background_remover:
                     temp_mask = model_output['masks'][z].detach().cpu().numpy().astype(np.uint8)
 
                     # Check a pixel in the mask_holder and if it is zero (black), copy the corresponding
-                    # value from the mask into it. This code also catches the boundary
+                    # value from the mask into it. This code also catch the boundary
                     # condition at the extremes of the frame
                     top = int(math.floor(box[1]))
                     bottom = top + temp_mask.shape[0]
