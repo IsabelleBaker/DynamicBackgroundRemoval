@@ -788,13 +788,16 @@ class dynamic_background_remover:
                 for i in range(self.batch_size):
                     _, frame = cap.read()
                     if frame is None:
-                        cap.release()
-                        cv2.destroyAllWindows()
                         break
                     if batch_size == 1:
                         original_frame = copy.deepcopy(frame)
                     frame = self.resize_frame(frame)
                     batch.append(frame, )
+                if frame is None and len(batch) == 0:
+                    if frame_count < duration:
+                        print(f'Video file metadata or content is corrupted. Skipping any remaining content after corruption.')
+                        print('Exiting cleanly now. Please check the results.')
+                    break
                 # if no animals were found in the frame, move on to the next frame
                 outputs = self.run_inference(batch, view_classes, input_scale=scale)
 
