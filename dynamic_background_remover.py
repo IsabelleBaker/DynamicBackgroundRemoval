@@ -747,7 +747,7 @@ class dynamic_background_remover:
         if num_frames == 0:
             cap.release()
             assert num_frames == 0, 'video not found or empty!'
-        video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - 1
         assert int(video_start * frames_per_second) <= video_length, "Check the start time and ensure it is within " \
                                                                      "the duration of the video"
 
