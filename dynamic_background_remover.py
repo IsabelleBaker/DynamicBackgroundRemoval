@@ -108,6 +108,18 @@ class dynamic_background_remover:
                 mask = mask * 255
                 new_masks.append(torch.squeeze(mask))
 
+                # normalize the boxes to catch boundary condition at maximum width and height
+                if int(new_boxes[boxes_index][3]) <= self.height:
+                    new_boxes[boxes_index][3] = int(new_boxes[boxes_index][3])
+                else:
+                    new_boxes[boxes_index][3] = self.height
+                new_boxes[boxes_index][1] = int(new_boxes[boxes_index][3]-height)
+                if int(new_boxes[boxes_index][2]) <= self.width:
+                    new_boxes[boxes_index][2] = int(new_boxes[boxes_index][2])
+                else:
+                    new_boxes[boxes_index][2] = self.width
+                new_boxes[boxes_index][0] = int(new_boxes[boxes_index][2] - width)
+
             # Filter the scores and predicted classes based on the NMS output
             new_scores = model_outputs[i]['scores']
             new_prediction_classes = model_outputs[i]["pred_classes"]
@@ -265,14 +277,6 @@ class dynamic_background_remover:
                             data[..., :][non_black_areas.T] = animal_class.active_tracklets['animals'][z]['color']
                             mask = Image.fromarray(data)
                             pixels = mask.load()
-                            y_max = y_min + mask.size[1]
-                            if y_max > self.height:
-                                y_max = self.height
-                                y_min = y_max - mask.size[1]
-                            x_max = x_min + mask.size[0]
-                            if x_max > self.width:
-                                x_max = self.width
-                                x_min = x_max - mask.size[0]
                             for i in range(mask.size[0]):
                                 for j in range(mask.size[1]):
                                     if holder_pixels[i + x_min, j + y_min] == (0, 0, 0):
@@ -397,14 +401,8 @@ class dynamic_background_remover:
                     # condition at the extremes of the frame
                     top = int(math.floor(box[1]))
                     bottom = top + temp_mask.shape[0]
-                    if bottom > self.height:
-                        bottom = self.height
-                        top = bottom - temp_mask.shape[0]
                     left = int(math.floor(box[0]))
                     right = left + temp_mask.shape[1]
-                    if right > self.width:
-                        right = self.width
-                        left = right - temp_mask.shape[1]
                     mask_holder[top:bottom, left:right] += temp_mask.clip(max=1)[..., None]
 
         # Make a true/false array out of the mask_holder numpy. True means not white
@@ -786,7 +784,6 @@ class dynamic_background_remover:
                 if self.stop:
                     break
                 self.current_frame = frame_count + start_frame
-                self.percent_complete = int(frame_count / (duration - start_frame))
                 batch = []
                 for i in range(self.batch_size):
                     _, frame = cap.read()
