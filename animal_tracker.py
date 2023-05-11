@@ -157,7 +157,7 @@ class animal_tracker:
                     else:
                         cx = animal_last_box[0]
                         cy = animal_last_box[1]
-                    animal_center = [cx, cy]
+                    animal_center = [cx.cpu(), cy.cpu()]
 
                     for i in range(len(temp_masks)):
                         contours, _ = cv2.findContours(temp_masks[i].detach().cpu().numpy(), cv2.RETR_CCOMP,
@@ -179,7 +179,7 @@ class animal_tracker:
                         else:
                             cx = temp_boxes[None][0][i][0]
                             cy = temp_boxes[None][0][i][1]
-                        current_test_center = [cx, cy]
+                        current_test_center = [cx.cpu(), cy.cpu()]
                         animal_center = np.array(animal_center)
                         distances.append(np.linalg.norm(animal_center - current_test_center))
                     if (min(distances) < self.max_distance_moved) and len(temp_boxes) > 0 and len(distances) > 0:
