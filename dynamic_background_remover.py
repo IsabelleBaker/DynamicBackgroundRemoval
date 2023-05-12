@@ -1,6 +1,8 @@
 import cv2
 import json
 import os
+
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 import torch
 import torchvision
 from datetime import datetime
@@ -19,7 +21,8 @@ class dynamic_background_remover:
                  detection_threshold: float = 0.25,
                  iou: float = 0.4,
                  sigmoid_threshold: float = 0.55,
-                 inference_size: int = 640) -> None:
+                 inference_size: int = 640,
+                 enable_mps: bool = False) -> None:
         self.current_frame = 0
         self.batch_size = 1
         self.header_center = None
@@ -42,6 +45,7 @@ class dynamic_background_remover:
         self.stop = False
         self.inference_size = inference_size
         self.ort_sess = None
+        self.enable_mps = enable_mps
         self._load_model(model_path)
         self._load_thing_names(thing_names_path)
 
@@ -52,10 +56,14 @@ class dynamic_background_remover:
         if torch.cuda.is_available():
             self.model = torch.jit.load(model_path, map_location='cuda:0')
             self.device = torch.device('cuda:0')
-        elif False:
-            self.model = torch.jit.load(model_path, map_location='cpu')
-            self.device = torch.device('mps')
-            self.model.to(self.device)
+        elif self.enable_mps:
+            if torch.backends.mps.is_available():
+                self.model = torch.jit.load(model_path, map_location='cpu')
+                self.device = torch.device('mps')
+                self.model.to(self.device)
+            else:
+                self.model = torch.jit.load(model_path, map_location='cpu')
+                self.device = torch.device('cpu')
         else:
             self.model = torch.jit.load(model_path, map_location='cpu')
             self.device = torch.device('cpu')
@@ -67,8 +75,12 @@ class dynamic_background_remover:
             imported_data = f.read()
 
         # Reconstruct the data as a dictionary in index, name pairs {'0': 'rat', '1': 'larva', etc)
-        self.model_things = json.loads(imported_data)
-
+        class_storage = json.loads(imported_data)
+        if 'training_size' in class_storage:
+            self.model_things = class_storage['animal_mapping']
+            self.inference_size = int(class_storage['training_size'])
+        else:
+            self.model_things = class_storage
         # Invert the references so we can easily reverse lookup
         self.model_things_lookup = {}
         for key in self.model_things.keys():
@@ -78,7 +90,6 @@ class dynamic_background_remover:
     # to match the original image. This is also where I'll add conversions for other model types in
     # such as Yolov8 which could be used in the future.
     def _normalize_model_outputs(self, model_outputs, view_classes, temp_view_class_indexes, scale):
-
         outputs = []
         for i in range(len(model_outputs)):
             # Resize the boxes and masks to match the original image before storing them in the internal structure.
@@ -113,13 +124,12 @@ class dynamic_background_remover:
                     new_boxes[boxes_index][3] = int(new_boxes[boxes_index][3])
                 else:
                     new_boxes[boxes_index][3] = self.height
-                new_boxes[boxes_index][1] = int(new_boxes[boxes_index][3]-height)
+                new_boxes[boxes_index][1] = int(new_boxes[boxes_index][3] - height)
                 if int(new_boxes[boxes_index][2]) <= self.width:
                     new_boxes[boxes_index][2] = int(new_boxes[boxes_index][2])
                 else:
                     new_boxes[boxes_index][2] = self.width
                 new_boxes[boxes_index][0] = int(new_boxes[boxes_index][2] - width)
-
             # Filter the scores and predicted classes based on the NMS output
             new_scores = model_outputs[i]['scores']
             new_prediction_classes = model_outputs[i]["pred_classes"]
@@ -144,7 +154,6 @@ class dynamic_background_remover:
             i = 0
             original_tensor.append(torchvision.io.read_image(img_path))
             pad = (0, 0, 0, 0)
-
             # Create a pad around the image to make it square and divisible by 32
             # then resize it to the inference size
             if original_tensor[i].shape[2] > original_tensor[i].shape[1]:
@@ -167,7 +176,6 @@ class dynamic_background_remover:
             temp4 = input_image.shape[1]
             temp5 = processed_image_tensor[i].shape[1]
             scale.append((temp4 / temp5), )
-
         # If img_path is not a string, assume it is a numpy array from opencv
         # which has a format of BGR. Required to process video frames
         # from opencv (cv2.VideoCapture)
@@ -177,10 +185,8 @@ class dynamic_background_remover:
             for i in range(len(img_path)):
                 model_input.append({'image': img_path[i]}, )
                 scale.append(input_scale)
-
         with torch.no_grad():
             outputs = self.model(model_input)
-
         # If no prediction classes were selected, show all animals.
         if view_classes is None:
             view_classes = list(self.model_things.values())
@@ -198,27 +204,28 @@ class dynamic_background_remover:
             # This confirms that there is a valid mapping for the animal you entered within the list of things to view.
             if name in val_list:
                 temp_view_class_indexes.append(int(key_list[val_list.index(name)]))
-
         outputs = self._normalize_model_outputs(outputs, view_classes, temp_view_class_indexes, scale)
         return outputs
 
     def get_original_with_masks(self,
-                                 image_path=None,
-                                 view_classes: list = None,
-                                 frame_number: int = 0,
-                                 model_output: dict = {},
-                                 draw_bbox: bool = True,
-                                 draw_text: bool = True,
-                                 draw_masks: bool = True):
+                                image_path=None,
+                                view_classes: list = None,
+                                frame_number: int = 0,
+                                model_output: dict = {},
+                                draw_bbox: bool = True,
+                                draw_text: bool = True,
+                                draw_masks: bool = True):
         # If an image path was passed in, then run inference on the image before proceeding.
         if isinstance(image_path, str):
             self.original_tensor = torchvision.io.read_image(image_path)
 
             # Assume that inference must be re-run and get the first dictionary in the return list
-            width = self.original_tensor.shape[1]
-            height = self.original_tensor.shape[2]
+            width = self.original_tensor.shape[2]
+            height = self.original_tensor.shape[1]
+            self.height = height
+            self.width = width
             font_scale, font_width = self.get_font_size(image_width=width, image_height=height)
-            self.header_font_scale = font_scale*.25
+            self.header_font_scale = font_scale
             self.header_font_width = int(font_width * .4)
             self.header_center = width / 2 - (width * .15)
 
@@ -280,7 +287,6 @@ class dynamic_background_remover:
                             for i in range(mask.size[0]):
                                 for j in range(mask.size[1]):
                                     if holder_pixels[i + x_min, j + y_min] == (0, 0, 0):
-
                                         # Change if white, change to color
                                         holder_pixels[i + x_min, j + y_min] = pixels[i, j]
 
@@ -355,10 +361,12 @@ class dynamic_background_remover:
             self.original_tensor = torchvision.io.read_image(image_path)
 
             # Assume that inference must be re-run and get the first dictionary in the return list
-            width = self.original_tensor.shape[1]
-            height = self.original_tensor.shape[2]
+            width = self.original_tensor.shape[2]
+            height = self.original_tensor.shape[1]
+            self.height = height
+            self.width = width
             font_scale, font_width = self.get_font_size(image_width=width, image_height=height)
-            self.header_font_scale = font_scale*.25
+            self.header_font_scale = font_scale
             self.header_font_width = int(font_width * .4)
             self.header_center = width / 2 - (width * .15)
 
@@ -414,13 +422,13 @@ class dynamic_background_remover:
         if draw_text:
             text = f"Frame Number: {frame_number}"
             original_image = cv2.putText(img=original_image,
-                                       text=text,
-                                       org=(int(self.header_center), int(30 * self.header_font_scale)),
-                                       fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                                       fontScale=self.header_font_scale,
-                                       color=(255, 0, 0),  # Put the frame number in red.
-                                       thickness=self.header_font_width
-                                       )
+                                         text=text,
+                                         org=(int(self.header_center), int(30 * self.header_font_scale)),
+                                         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                                         fontScale=self.header_font_scale,
+                                         color=(255, 0, 0),  # Put the frame number in red.
+                                         thickness=self.header_font_width
+                                         )
 
         # Turn the color channels back to BRG from RGB for opencv
         composite = cv2.cvtColor(original_image, cv2.COLOR_RGB2BGR)
@@ -441,10 +449,12 @@ class dynamic_background_remover:
             self.original_tensor = torchvision.io.read_image(image_path)
 
             # Assume that inference must be re-run. and get the first dictionary in the return list
-            width = self.original_tensor.shape[1]
-            height = self.original_tensor.shape[2]
+            width = self.original_tensor.shape[2]
+            height = self.original_tensor.shape[1]
+            self.height = height
+            self.width = width
             font_scale, font_width = self.get_font_size(image_width=width, image_height=height)
-            self.header_font_scale = font_scale*.25
+            self.header_font_scale = font_scale
             self.header_font_width = int(font_width * .4)
             self.header_center = width / 2 - (width * .15)
 
@@ -486,7 +496,7 @@ class dynamic_background_remover:
                                                        cv2.CHAIN_APPROX_NONE)
                         if draw_contour:
                             cv2.drawContours(image=original_image,
-                                             contours=contours ,
+                                             contours=contours,
                                              contourIdx=-1,
                                              color=outline_color,
                                              thickness=1,
@@ -646,7 +656,6 @@ class dynamic_background_remover:
                           view_classes: list,
                           input_video_name: str,
                           video_output_path: str = os.getcwd(),
-                          blanks: bool = True,
                           batch_size: int = 1,
                           progress: bool = False,
                           original_with_masks: bool = False,
@@ -660,7 +669,6 @@ class dynamic_background_remover:
                           max_distance_moved: int = 5,
                           video_start: int = 0,
                           debug_masks: bool = False,
-                          frame_skip: int = 0,
                           tracking_iou: float = 0.5) -> None:
 
         # If the requested length of individual animal clips is > 0, set the flag to make individual videos and
@@ -768,10 +776,9 @@ class dynamic_background_remover:
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
         if decorate_videos:
-
             # Find the right size for the Frame Number text
             font_scale, font_width = self.get_font_size(image_width=width, image_height=height)
-            self.header_font_scale = font_scale*.25
+            self.header_font_scale = font_scale
             self.header_font_width = int(font_width * .4)
             self.header_center = width / 2 - (width * .15)
 
@@ -795,7 +802,8 @@ class dynamic_background_remover:
                     batch.append(frame, )
                 if frame is None and len(batch) == 0:
                     if frame_count < duration:
-                        print(f'Video file metadata or content is corrupted. Skipping any remaining content after corruption.')
+                        print(
+                            f'Video file metadata or content is corrupted. Skipping any remaining content after corruption.')
                         print('Exiting cleanly now. Please check the results.')
                     break
                 # if no animals were found in the frame, move on to the next frame
@@ -1004,13 +1012,15 @@ class dynamic_background_remover:
                                                                                    mode=cv2.RETR_EXTERNAL,
                                                                                    method=cv2.CHAIN_APPROX_NONE)
                                             color = self.getContourColor(idx, mini_clip_length)
-                                            contour_thickness = int(max(abs(int(box[3]) - int(box[1])), abs(int(box[0]) - int(box[2])))/150 + 1)
+                                            contour_thickness = int(max(abs(int(box[3]) - int(box[1])),
+                                                                        abs(int(box[0]) - int(box[2]))) / 150 + 1)
                                             cv2.drawContours(image=temp_contours,
                                                              contours=contours,
                                                              contourIdx=-1,
                                                              color=color,
                                                              thickness=contour_thickness,
-                                                             offset=(int(box[0]) - xmin + offset_x, int(box[1]) - ymin + offset_y)
+                                                             offset=(int(box[0]) - xmin + offset_x,
+                                                                     int(box[1]) - ymin + offset_y)
 
                                                              )
                                         mini_animal_writer.release()
@@ -1109,7 +1119,6 @@ class dynamic_background_remover:
                     new_contours.append(fixed_contours, )
 
                     if debug:
-
                         # Testing purposes only, to show individual contours
                         cv2.drawContours(contour_image, contours, -1, (255, 255, 255), 1)
                         cv2.imshow('contours', contour_image)
@@ -1161,9 +1170,12 @@ class dynamic_background_remover:
         return new_scores, new_pred_classes, new_contours, new_inners
 
     def get_font_size(self, image_width, image_height, font_scale=2e-3, thickness_scale=5e-3):
-        font_scale = (image_height+image_width) * font_scale
+        font_scale = (image_height + image_width) * font_scale
         font_scale = font_scale if font_scale > 0.5 else 0.5
         thickness = int(math.ceil(min(image_height, image_width) * thickness_scale))
+        font_scale = font_scale*.25 if font_scale *.25 >= 0.5 else 0.5
+
+        thickness = int(thickness * 0.5) if int(thickness*0.5) >= 1 else 1
         return font_scale, thickness
 
     # This is taken from the original LabGym code to keep the colors consistent from the original LabGym
