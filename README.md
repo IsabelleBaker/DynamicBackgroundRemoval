@@ -57,7 +57,19 @@ Happy training!
 ## About the Standalone Software Framework
 For now, I will not talk much about the standalone framework.  I am in the process of creating some additional documentation for the UIs, but for now, run them and experiment with them. Almost every button and text entry has a tip for its usage if you hover over it. 
 
-I suggest starting without installing the trainer. That installation is a lot more involved. Begin with dynamic_background_gui.py using the models in my google drive and the larva avi file I provide. Once it successfully processes a few seconds of a video to completion, run the Track_payer_gui.py to get a sense of how the video is being processed. Only then, install all the software and libraries required to train your model. I still prefer to train my models in Google Colab and then I perform the background removal on my local machine. However, with the software I have provided, the choice is up to you. 
+I suggest starting without installing the trainer. That installation is a lot more involved. Begin with dynamic_background_gui.py using the models in my google drive and the larva avi file I provide. Once it successfully processes a few seconds of a video to completion, run my FrameGrabber (seperate project) or Track_payer_gui.py from this repo to get a sense of how the video is being processed. Only then, install all the software and libraries required to train your model. I still prefer to train my models in Google Colab and then I perform the background removal on my local machine. However, with the software I have provided, the choice is up to you. 
+
+## Notes about the recent addition of Apple Silicon (MPS) support {Experimental}
+In the standalone framework I have added the ability to enable MPS support. The framework code is compatible with MPS now but the pytorch code still has some work to do. If you want to experiment with MPS, just know that you may get some crashes, etc. for a while. Make sure to install the nightly builds to get the latest support from pytorch, instead of what is listed in my basic install instructions.
+
+MPS acceleration is available on MacOS 12.3+:
+pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+
+-I have found that training a single animal works fine and is ~40% faster than using only my M1 Max cpu. With multiple animals the loss explodes to infinity and errors. 
+-Inferencing seems slower, as of right now, using MPS than just using my M1 Max cpu. That may be different if you don't have a Max cpu. This is *likely* due to torchvision::nms not currently being implemented. Therefore, with every frame it must fallback to CPU for this operation. That's a guess as to what is happening, but right now I still use CPU for inferencing locally. 
+-Some videos cause an exception to be thrown from within the model. Again, I think this is due to the immature pytorch code at this time. 
+
+I'll update these observations as I have time to do more testing. Let me know if you think anything else should be noted here about MPS.
 
 
 ### If you have any feedback on this software, please reach out here or through my LinkedIn. 
