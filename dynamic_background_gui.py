@@ -1,19 +1,3 @@
-"""
-    inputs:
-    - title (The label for the top of the panel)
-    - mode (TEST, SAMPLES, default=MIN)
-        - TEST: Set up model, test model on image (optional), process a video
-        - SAMPLES: Set up model, process a video
-        - MIN: Set up model
-
-    outputs:
-    - model_path
-    - inference_size
-    - thing_names_path
-    - display_things
-    - detection_threshold
-"""
-
 import os
 import cv2
 import wx
@@ -32,7 +16,7 @@ class DynamicBackgroundInitialWindow(wx.Frame):
         self.frame_sizer = wx.BoxSizer(wx.VERTICAL)
         self.frame_sizer.Add(self.panel, 1, wx.EXPAND)
         self.SetSizer(self.frame_sizer)
-        self.Size = (self.panel.BestVirtualSize[0] + 20, self.panel.BestVirtualSize[1] + 30)
+        self.Size = (self.panel.BestVirtualSize[0] + 30, self.panel.BestVirtualSize[1] + 40)
         self.Move(wx.Point(50, 50))
         self.Show()
 
@@ -40,7 +24,8 @@ class DynamicBackgroundInitialWindow(wx.Frame):
 class DynamicBackgroundPanel(wx.ScrolledWindow):
 
     def __init__(self, parent, mode='TEST'):
-        wx.ScrolledWindow.__init__(self, parent, id=-1, pos=wx.DefaultPosition, size=wx.DefaultSize, style=wx.HSCROLL | wx.VSCROLL,
+        wx.ScrolledWindow.__init__(self, parent, id=-1, pos=wx.DefaultPosition, size=wx.DefaultSize,
+                                   style=wx.HSCROLL | wx.VSCROLL,
                                    name="scrolledWindow")
         self.SetScrollbars(1, 1, 600, 400)
 
@@ -67,33 +52,43 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 
         # Add the button to get the input directory and bind its event function
         get_model_button = wx.Button(self, label='Select A Model Folder')
-        wx.Button.SetToolTip(get_model_button, 'Navigate to the location of the desired model '
-                                               '(for dynamic background removal) and select it')
+        get_model_button.SetToolTip('Navigate to the location of the desired model '
+                                    '(for dynamic background removal) and select it')
         get_model_button.Bind(wx.EVT_BUTTON, self.evt_get_model)
         self.get_model_label = wx.TextCtrl(self, value='{your model}', style=wx.TE_LEFT, size=(300, -1))
-        wx.Button.SetToolTip(self.get_model_label, 'Navigate to the location of the desired model '
-                                                   '(for dynamic background removal) and select it')
+        self.get_model_label.SetToolTip('Navigate to the location of the desired model '
+                                        '(for dynamic background removal) and select it')
 
-        inference_size_text = wx.StaticText(self, label='Frame Processing Size')
-        wx.Button.SetToolTip(inference_size_text, 'Enter the size (in pixels) that you would like '
-                                                  'your video to be processed at. A smaller size is more '
-                                                  'efficient but produces lower quality results.')
-        self.inference_size_widget = wx.SpinCtrlDouble(self, initial=640, min=64, max=1280, inc=64)
-        wx.Button.SetToolTip(self.inference_size_widget, 'Enter the size (in pixels) that you would like '
-                                                         'your video to be processed at. A smaller size is more '
-                                                         'efficient but produces lower quality results.')
+        self.inference_size_text = wx.StaticText(self, label='Frame Processing Size')
+        self.inference_size_text.SetToolTip('Enter the size (in pixels) that you would like '
+                                       'your video to be processed at. A smaller size is more '
+                                       'efficient but produces lower quality results.')
+        self.inference_size_widget = wx.SpinCtrlDouble(self, initial=0, min=64, max=1280, inc=64)
+        self.inference_size_widget.SetToolTip('Enter the size (in pixels) that you would like '
+                                              'your video to be processed at. A smaller size is more '
+                                              'efficient but produces lower quality results.')
         self.inference_size_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_inference_size)
         self.inference_size = self.inference_size_widget.GetValue()
+        self.inference_size_widget.Disable()
+        self.inference_size_text.Disable()
 
-        detection_threshold_text = wx.StaticText(self, label='Detection Threshold')
-        wx.Button.SetToolTip(detection_threshold_text, 'Enter the percent confidence for detection of an animal '
-                                                       'you would like (0.00-1.00)')
+        self.detection_threshold_text = wx.StaticText(self, label='Detection Threshold')
+        self.detection_threshold_text.SetToolTip('Enter the percent confidence for detection of an animal '
+                                            'you would like (0.00-1.00)')
         self.detection_threshold_widget = wx.SpinCtrlDouble(self, min=0.00, max=1.00, inc=0.01, initial=0.80)
-        wx.Button.SetToolTip(self.detection_threshold_widget, 'Enter the percent confidence for detection of an animal '
-                                                              'you would like (0.00-1.00)')
+        self.detection_threshold_widget.SetToolTip('Enter the percent confidence for detection of an animal '
+                                                   'you would like (0.00-1.00)')
         self.detection_threshold_widget.Bind(wx.EVT_SPINCTRLDOUBLE, self.evt_set_detection_threshold)
         self.detection_threshold = self.detection_threshold_widget.GetValue()
+        self.detection_threshold_text.Disable()
+        self.detection_threshold_widget.Disable()
 
+        self.enable_mps_checkbox = wx.CheckBox(self,
+                                               label='Enable Support for \n Apple Silicon (Experimental)')  # Create the checkbox
+        self.enable_mps_checkbox.SetValue(False)  # Set the default to "checked
+        self.enable_mps_checkbox.SetToolTip(
+            'Apple Silicon support in Pytorch is still a work in progress. Use at your own risk')
+        self.enable_mps_checkbox.Disable()
         # End of Step 1 GUI
 
         if self.mode == 'TEST':
@@ -105,23 +100,32 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             # Add the button to get the input directory and bind its event function
             get_image_button = wx.Button(self, label='Select An Image')
             get_image_button.Bind(wx.EVT_BUTTON, self.evt_get_image)
+            get_image_button.SetToolTip('Specify an Image to use to test the model')
             self.get_image_label = wx.TextCtrl(self, value='{your image}', style=wx.TE_LEFT, size=(300, -1))
+            self.get_image_label.SetToolTip('Specify an Image to use to test the model')
             # Add the checkbox widgets in their own row.
 
             self.image_with_masks_checkbox = wx.CheckBox(self, label='Masks')  # Create the checkbox
             self.image_with_masks_checkbox.SetValue(True)  # Set the default to "checked
+            self.image_with_masks_checkbox.SetToolTip('Produce an image showing the original with solid masks overlaid')
 
             self.image_masked_checkbox = wx.CheckBox(self, label='Masked')  # Create the checkbox
             self.image_masked_checkbox.SetValue(True)  # Set the default to "checked"
+            self.image_masked_checkbox.SetToolTip(
+                'Produce an image showing only the detected animals in the original image')
 
             self.image_with_contours_checkbox = wx.CheckBox(self, label='Outlined')  # Create the checkbox
             self.image_with_contours_checkbox.SetValue(True)  # Set the default to "checked"
+            self.image_with_contours_checkbox.SetToolTip('Produce an image with the detected animals outlined')
 
             self.image_decorate_checkbox = wx.CheckBox(self, label='Decorate')  # Create the checkbox
             self.image_decorate_checkbox.SetValue(True)  # Set the default to "checked"
+            self.image_decorate_checkbox.SetToolTip(
+                'When producing images show bounding boxes, animal names, and confidence values')
 
             process_image_button = wx.Button(self, label='Process Image')
             process_image_button.Bind(wx.EVT_BUTTON, self.evt_process_image)
+            process_image_button.SetToolTip('Run the image through the specified model')
 
             ###### End of Step 2 GUI
 
@@ -135,116 +139,144 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             get_video_path_button = wx.Button(self, label='Select A Video')
             get_video_path_button.Bind(wx.EVT_BUTTON, self.evt_get_video_path)
             self.get_video_path_label = wx.TextCtrl(self, value='{your video}', style=wx.TE_LEFT, size=(300, -1))
-            wx.Button.SetToolTip(self.get_video_path_label,
-                                 'Navigate to the location of the video '
-                                 'you would like to process and select it')
-            wx.Button.SetToolTip(get_video_path_button,
-                                 'Navigate to the location of the video '
-                                 'you would like to process and select it')
+            self.get_video_path_label.SetToolTip('Navigate to the location of the video '
+                                                 'you would like to process and select it')
+            get_video_path_button.SetToolTip('Navigate to the location of the video '
+                                             'you would like to process and select it')
 
             # Add the button to get the output directory and bind its event function
             get_video_output_directory_button = wx.Button(self, label='Select Output Path')
             get_video_output_directory_button.Bind(wx.EVT_BUTTON, self.evt_get_video_output_directory)
             self.get_video_output_directory_label = wx.TextCtrl(self, value=self.output_path, style=wx.TE_LEFT,
                                                                 size=(300, -1))
-            wx.Button.SetToolTip(get_video_output_directory_button,
-                                 'Navigate to the location where you would like '
-                                 'to place your output and select it')
-            wx.Button.SetToolTip(self.get_video_output_directory_label,
-                                 'Navigate to the location where you would like '
-                                 'to place your output and select it')
+            get_video_output_directory_button.SetToolTip('Navigate to the location where you would like '
+                                                         'to place your output and select it')
+            self.get_video_output_directory_label.SetToolTip('Navigate to the location where you would like '
+                                                             'to place your output and select it')
 
             self.video_masked_checkbox = wx.CheckBox(self, label='Masked')  # Create the checkbox
             self.video_masked_checkbox.SetValue(True)  # Set the default to "checked"
+            self.video_masked_checkbox.SetToolTip('Produce a video showing only the detected animals in '
+                                                  'the original image')
 
             self.video_with_masks_checkbox = wx.CheckBox(self, label='With Masks')  # Create the checkbox
-            self.video_with_masks_checkbox.SetValue(False)
+            self.video_with_masks_checkbox.SetValue(True)
+            self.video_with_masks_checkbox.SetToolTip('Produce a video showing the original with solid masks overlaid')
 
             self.video_contours_checkbox = wx.CheckBox(self, label='Outlined')  # Create the checkbox
             self.video_contours_checkbox.SetValue(True)  # Set the default to "checked"
-            wx.Button.SetToolTip(self.video_contours_checkbox,
-                                 'Check the box if you would like to display '
-                                 'the video processing in real-time')
+            self.video_contours_checkbox.SetToolTip('Produce a video with the detected animals outlined')
 
             self.video_decorate_checkbox = wx.CheckBox(self, label='Decorate Videos')  # Create the checkbox
             self.video_decorate_checkbox.SetValue(True)
-
-            self.video_exclude_blanks_checkbox = wx.CheckBox(self, label='Exclude Blanks')  # Create the checkbox
-            self.video_exclude_blanks_checkbox.SetValue(True)
+            self.video_decorate_checkbox.SetToolTip('When producing videos show bounding boxes, animal names, and '
+                                                    'confidence values')
 
             self.video_show_progress_checkbox = wx.CheckBox(self, label='Show Progress')  # Create the checkbox
             self.video_show_progress_checkbox.SetValue(True)
+            self.video_show_progress_checkbox.SetToolTip('Display the progress videos while analyzing the video')
 
             self.video_save_tracker_info_checkbox = wx.CheckBox(self, label='Save Tracker Info')  # Create the checkbox
             self.video_save_tracker_info_checkbox.SetValue(True)
+            self.video_save_tracker_info_checkbox.SetToolTip('Save all animal tracking info into a pkl file when the '
+                                                             'analysis session is complete. You may use this file '
+                                                             'within one of my other tools to see the tracking. ')
 
             self.video_debug_masks_checkbox = wx.CheckBox(self, label='Debug Masks')  # Create the checkbox
+            self.video_debug_masks_checkbox.SetToolTip('Save frames of individual animals into a special debug folder.'
+                                                       ' This is useful for understand exactly how the animation videos'
+                                                       ' and contour images are being produced.')
             self.video_save_progress_videos_checkbox = wx.CheckBox(self, label='Save Progress Videos')
             self.video_save_progress_videos_checkbox.SetValue(True)
+            self.video_save_progress_videos_checkbox.SetToolTip('Save the progress videos (masked, with masks, '
+                                                                'and/or outlined) when analysis is complete.')
 
             if self.mode != 'TEST':
                 self.video_debug_masks_checkbox.Hide()
                 self.video_save_progress_videos_checkbox.Hide()
-                self.video_exclude_blanks_checkbox.Hide()
                 self.video_decorate_checkbox.Hide()
                 self.video_with_masks_checkbox.Hide()
-                # self.video_masked_checkbox.Hide()
                 self.video_show_progress_checkbox.Hide()
 
             video_start_time_text = wx.StaticText(self, label='Start \nTime (s)', style=wx.ALIGN_CENTER_HORIZONTAL)
             self.video_start_time_widget = wx.SpinCtrl(self, initial=0, min=0, max=1000000)
-            wx.Button.SetToolTip(video_start_time_text,
-                                 'Enter the time at which you would like to start '
-                                 'processing the video')
-            wx.Button.SetToolTip(self.video_start_time_widget,
-                                 'Enter the time at which you would like to start '
-                                 'processing the video')
+            video_start_time_text.SetToolTip('Enter the time at which you would like to start '
+                                             'processing the video')
+            self.video_start_time_widget.SetToolTip('Enter the time at which you would like to start '
+                                                    'processing the video')
             video_duration_text = wx.StaticText(self, label='Duration \n(s)', style=wx.ALIGN_CENTER_HORIZONTAL)
-            wx.Button.SetToolTip(video_duration_text,
-                                 'Enter the amount of time in the video you would '
-                                 'like to be processed')
+            video_duration_text.SetToolTip('Enter the amount of time in the video you would '
+                                           'like to be processed')
             self.video_duration_widget = wx.SpinCtrl(self, initial=-1, min=-1, max=1000000)
-            wx.Button.SetToolTip(self.video_duration_widget,
-                                 'Enter the amount of time in the video you would '
-                                 'like to be processed')
+            self.video_duration_widget.SetToolTip('Enter the amount of time in the video you would '
+                                                  'like to be processed')
             animal_clip_length_text = wx.StaticText(self, label='Mini-Clips \n(frames)',
                                                     style=wx.ALIGN_CENTER_HORIZONTAL)
             self.animal_clip_length_widget = wx.SpinCtrl(self, initial=15, min=0, max=10000)
-            wx.Button.SetToolTip(animal_clip_length_text,
-                                 'Enter the number of frames you would like '
-                                 'in each mini-clip for behaviors')
-            wx.Button.SetToolTip(self.animal_clip_length_widget,
-                                 'Enter the number of frames you would like '
-                                 'in each mini-clip for behaviors')
+            animal_clip_length_text.SetToolTip('Enter the number of frames you would like '
+                                               'in each mini-clip for behaviors')
+            self.animal_clip_length_widget.SetToolTip('Enter the number of frames you would like '
+                                                      'in each mini-clip for behaviors')
             lost_threshold_text = wx.StaticText(self, label='Lost Threshold \n(frames)',
                                                 style=wx.ALIGN_CENTER_HORIZONTAL)
+            lost_threshold_text.SetToolTip('Maximum time (in frames) that an animal can go undetected and then'
+                                           'reappear. After this threshold an animal will be marked as permanently'
+                                           ' lost.')
             self.lost_threshold_widget = wx.SpinCtrl(self, initial=120, min=0, max=10000)
-            frame_skip_text = wx.StaticText(self, label='Frame Skip \n(frames)', style=wx.ALIGN_CENTER_HORIZONTAL)
-            self.frame_skip_widget = wx.SpinCtrl(self, initial=0, min=0, max=10000)
+            self.lost_threshold_widget.SetToolTip('Maximum time (in frames) that an animal can go undetected and then '
+                                                  'reappear. After this threshold an animal will be marked as permanently'
+                                                  ' lost.')
             batch_size_text = wx.StaticText(self, label='Batch Size \n(frames)', style=wx.ALIGN_CENTER_HORIZONTAL)
             self.batch_size_widget = wx.SpinCtrl(self, initial=1, min=1, max=100)
-            wx.Button.SetToolTip(batch_size_text,
-                                 'Batches can speed up the video processing '
-                                 'if GPUs are used. Else, keep the value as 1.')
-            wx.Button.SetToolTip(self.batch_size_widget,
-                                 'Batches can speed up the video processing '
-                                 'if GPUs are used. Else, keep the value as 1.')
+            batch_size_text.SetToolTip('Batches can speed up the video processing '
+                                       'if GPUs are used. Else, keep the value as 1.')
+            self.batch_size_widget.SetToolTip('Batches can speed up the video processing '
+                                              'if GPUs are used. Else, keep the value as 1.')
             tracking_iou_text = wx.StaticText(self, label='Tracking IoU \nThreshold', style=wx.ALIGN_CENTER_HORIZONTAL)
+            tracking_iou_text.SetToolTip(
+                'IoU Threshhold used to accept a detected animal as the same animal previously detected. '
+                'Do not modify unless you understand the tracking algorithm.')
             self.tracking_iou_widget = wx.SpinCtrlDouble(self, min=0.00, max=1.00, inc=0.01, initial=0.40)
+            tracking_iou_text.SetToolTip(
+                'IoU Threshhold used to accept a detected animal as the same animal previously detected. '
+                'Do not modify unless you understand the tracking algorithm.')
 
             tracking_distance_text = wx.StaticText(self, label='Max Distance \nMoved(%)',
                                                    style=wx.ALIGN_CENTER_HORIZONTAL)
+            tracking_distance_text.SetToolTip("Maximum distance the center of a detected animal's bounding box can "
+                                              "move and still be considered the same animal for tracking purposes. "
+                                              "This value is a percentage of the image's diagonal length to "
+                                              "compensate for differing sizes of animals within given videos. For a "
+                                              "large animal in a frame, the value should be larger. "
+                                              "Default works well for small animals within a frame. Only used if "
+                                              "IoU tracking fails.")
 
             self.tracking_distance_widget = wx.SpinCtrl(self, initial=5, min=0, max=100)
+            self.tracking_distance_widget.SetToolTip("Maximum distance the center of a detected animal's bounding box "
+                                                     "can move and still be considered the same animal for tracking "
+                                                     "purposes. "
+                                                     "This value is a percentage of the image's diagonal length to "
+                                                     "compensate for differing sizes of animals within given videos. "
+                                                     "For a "
+                                                     "large animal in a frame, the value should be larger. "
+                                                     "Default works well for small animals within a frame. Only"
+                                                     " used if "
+                                                     "IoU tracking fails.")
 
             self.process_video_button = wx.Button(self, label='Process Video')
             self.process_video_button.Bind(wx.EVT_BUTTON, self.evt_process_video)
 
             stop_processing_video_button = wx.Button(self, label='Stop Processing')
             stop_processing_video_button.Bind(wx.EVT_BUTTON, self.evt_stop_video)
+            stop_processing_video_button.SetToolTip('This button stops the current video analysis. Note: This is NOT'
+                                                    ' an immediate action. It will gracefully stop the processing '
+                                                    'and cleanly close all files. Because of system load, you may'
+                                                    ' need to click it several times and then wait. There is no harm'
+                                                    ' in clicking it multiple times.')
 
         done_button = wx.Button(self, label='Done')
         done_button.Bind(wx.EVT_BUTTON, self.evt_done)
+        done_button.SetToolTip('Close the application')
 
         # Set up the container (BoxSizer) for the overall display window. Within this window, we will
         # place additional containers for sets of input and capabilities.
@@ -275,7 +307,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         inference_size_box = wx.StaticBox(self)
         inference_size_sizer = wx.StaticBoxSizer(inference_size_box, wx.VERTICAL)
 
-        inference_size_sizer.Add(inference_size_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        inference_size_sizer.Add(self.inference_size_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         inference_size_sizer.Add(self.inference_size_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
@@ -286,11 +318,20 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
         detection_threshold_box = wx.StaticBox(self)
         detection_threshold_sizer = wx.StaticBoxSizer(detection_threshold_box, wx.VERTICAL)
 
-        detection_threshold_sizer.Add(detection_threshold_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        detection_threshold_sizer.Add(self.detection_threshold_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         detection_threshold_sizer.Add(self.detection_threshold_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         model_parameter_options.Add(detection_threshold_sizer, flag=wx.ALIGN_CENTER)
+        model_parameter_options.Add(5, 0)
+
+        # Add the Apple Silicon selection widgets in their own row.
+        enable_mps_box = wx.StaticBox(self)
+        enable_mps_sizer = wx.StaticBoxSizer(enable_mps_box, wx.VERTICAL)
+
+        enable_mps_sizer.Add(self.enable_mps_checkbox, flag=wx.ALIGN_CENTER_HORIZONTAL)
+
+        model_parameter_options.Add(enable_mps_sizer, flag=wx.ALIGN_CENTER)
         model_parameter_options.Add(5, 0)
 
         # Place the Model setup items into the box.
@@ -426,13 +467,14 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                                      flag=wx.ALIGN_LEFT)  # Add this checkbox to the column
 
             # Set up the third column of checkboxes
-            video_exclude_blanks_sizer = wx.BoxSizer(wx.VERTICAL)
-            video_exclude_blanks_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
+            video_save_progress_sizer = wx.BoxSizer(wx.VERTICAL)
+            video_save_progress_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
 
-            video_exclude_blanks_sizer.Add(self.video_exclude_blanks_checkbox, 0, flag=wx.ALIGN_LEFT)
-            video_exclude_blanks_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
+            video_save_progress_sizer.Add(self.video_save_progress_videos_checkbox, 0,
+                                          flag=wx.ALIGN_LEFT)
+            video_save_progress_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
 
-            video_exclude_blanks_sizer.Add(self.video_show_progress_checkbox, 0, flag=wx.ALIGN_LEFT)
+            video_save_progress_sizer.Add(self.video_show_progress_checkbox, 0, flag=wx.ALIGN_LEFT)
 
             # Set up the fourth column of checkboxes
             video_save_tracker_info_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -442,15 +484,10 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                                               flag=wx.ALIGN_LEFT)  # Add this checkbox to the column
             video_save_tracker_info_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
 
-            video_save_tracker_info_sizer.Add(self.video_debug_masks_checkbox, 0, flag=wx.ALIGN_LEFT)
-
-            # Set up the fourth column of checkboxes
-            video_save_progress_videos_sizer = wx.BoxSizer(wx.VERTICAL)
-            video_save_progress_videos_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
-
-            video_save_progress_videos_sizer.Add(self.video_save_progress_videos_checkbox, 0,
-                                                 flag=wx.ALIGN_LEFT)  # Add this checkbox to the column
-            video_save_progress_videos_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
+            # Set up the fifth column of checkboxes
+            video_debug_masks_sizer = wx.BoxSizer(wx.VERTICAL)
+            video_debug_masks_sizer.Add(0, 10, 0)  # Add some vertical empty space to the column
+            video_debug_masks_sizer.Add(self.video_debug_masks_checkbox, 0, flag=wx.ALIGN_LEFT)
 
             # Set up the Horizontal space for the checkbox columns
             horizontal_video_parameter_checkboxes = wx.BoxSizer(wx.HORIZONTAL)
@@ -459,11 +496,11 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             horizontal_video_parameter_checkboxes.Add(10, 0, 0)
             horizontal_video_parameter_checkboxes.Add(video_contours_sizer)
             horizontal_video_parameter_checkboxes.Add(10, 0, 0)
-            horizontal_video_parameter_checkboxes.Add(video_exclude_blanks_sizer)
+            horizontal_video_parameter_checkboxes.Add(video_save_progress_sizer)
             horizontal_video_parameter_checkboxes.Add(10, 0, 0)
             horizontal_video_parameter_checkboxes.Add(video_save_tracker_info_sizer)
             horizontal_video_parameter_checkboxes.Add(10, 0, 0)
-            horizontal_video_parameter_checkboxes.Add(video_save_progress_videos_sizer)
+            horizontal_video_parameter_checkboxes.Add(video_debug_masks_sizer)
 
             # Add the checkbox columns to the layout
             video_parameter_options_vertical.Add(horizontal_video_parameter_checkboxes, flag=wx.EXPAND)
@@ -501,13 +538,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 
             lost_threshold_sizer.Add(self.lost_threshold_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
-            frame_skip_box = wx.StaticBox(self)
-            frame_skip_sizer = wx.StaticBoxSizer(frame_skip_box, wx.VERTICAL)
-
-            frame_skip_sizer.Add(frame_skip_text, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-            frame_skip_sizer.Add(self.frame_skip_widget, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
             batch_size_box = wx.StaticBox(self)
             batch_size_sizer = wx.StaticBoxSizer(batch_size_box, wx.VERTICAL)
 
@@ -522,8 +552,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             video_parameters_horizontal.Add(animal_clip_length_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
             video_parameters_horizontal.Add(5, 0)
             video_parameters_horizontal.Add(lost_threshold_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
-            video_parameters_horizontal.Add(5, 0)
-            video_parameters_horizontal.Add(frame_skip_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
             video_parameters_horizontal.Add(5, 0)
             video_parameters_horizontal.Add(batch_size_sizer, flag=wx.ALIGN_CENTER_VERTICAL)
 
@@ -564,10 +592,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                 tracking_parameters_column_2_box.Hide()
                 self.tracking_distance_widget.Hide()
                 tracking_distance_text.Hide()
-
-                frame_skip_box.Hide()
-                self.frame_skip_widget.Hide()
-                frame_skip_text.Hide()
 
             # Place the video setup items into the box.
             video_parameter_options_vertical.Add(0, 5)
@@ -648,18 +672,6 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                         self.thing_names_path = None
                         return
                     self.thing_names_path = file
-                    with open(self.thing_names_path) as f:
-                        imported_data = f.read()
-
-                    # reconstruct the data as a dictionary in index, name pairs {'0': 'rat', '1': 'larva', etc)
-                    model_things = json.loads(imported_data)
-
-                    # Invert the references so we can easily reverse lookup
-                    val_list = list(model_things.values())
-                    self.display_things = []
-                    self.display_things.append(str(val_list[0]))
-                    self.animals = []
-                    self.animals.append(self.display_things[0])
         if self.model_path is None:
             dlg = wx.GenericMessageDialog(None, 'No ts file was found!', caption='Error',
                                           style=wx.OK | wx.CENTER)
@@ -674,6 +686,32 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             self.model_path = None
             self.thing_names_path = None
             return
+        else:
+            with open(self.thing_names_path) as f:
+                imported_data = f.read()
+
+                # reconstruct the data as a dictionary in index, name pairs {'0': 'rat', '1': 'larva', etc)
+                class_storage = json.loads(imported_data)
+                if 'training_size' in class_storage:
+                    model_things = class_storage['animal_mapping']
+                    self.inference_size_widget.SetValue(int(class_storage['training_size']))
+                else:
+                    model_things = class_storage
+                    self.inference_size_widget.Enable()
+                    self.inference_size_text.Enable()
+                    self.inference_size_widget.SetValue(256)
+                    self.inference_size = 256
+                self.detection_threshold_widget.Enable()
+                self.detection_threshold_text.Enable()
+            # Invert the references so we can easily reverse lookup
+            val_list = list(model_things.values())
+            self.display_things = val_list  # []
+            # self.display_things.append(str(val_list[0]))
+
+            self.animals = self.display_things  # []
+            # self.animals.append(self.display_things[0])
+            self.enable_mps_checkbox.Enable()
+
         dlg.Destroy()
 
     # Function: evt_get_input_directory
@@ -730,7 +768,8 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
             return
         animals = dynamic_background_remover(model_path=self.model_path,
                                              detection_threshold=self.detection_threshold_widget.GetValue(),
-                                             thing_names_path=self.thing_names_path, )
+                                             thing_names_path=self.thing_names_path,
+                                             enable_mps=self.enable_mps_checkbox.GetValue())
 
         # test sending in the images and view classes directly
         animals.inference_size = int(self.inference_size_widget.GetValue())
@@ -793,7 +832,8 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
     def get_tracked_video(self):
         self.animals = dynamic_background_remover(model_path=self.model_path,
                                                   detection_threshold=self.detection_threshold_widget.GetValue(),
-                                                  thing_names_path=self.thing_names_path, )
+                                                  thing_names_path=self.thing_names_path,
+                                                  enable_mps=self.enable_mps_checkbox.GetValue())
         self.animals.inference_size = int(self.inference_size_widget.GetValue())
         self.percent_video_complete = self.animals.percent_complete
         self.animals.get_tracked_video(input_video_name=self.video_path,
@@ -801,10 +841,8 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
                                        view_classes=self.display_things,
                                        original_with_contours=self.video_contours_checkbox.GetValue(),
                                        decorate_videos=self.video_decorate_checkbox.GetValue(),
-                                       frame_skip=self.frame_skip_widget.GetValue(),
                                        batch_size=self.batch_size_widget.GetValue(),
                                        tracking_iou=self.tracking_iou_widget.GetValue(),
-                                       blanks=self.video_exclude_blanks_checkbox.GetValue(),
                                        progress=self.video_show_progress_checkbox.GetValue(),
                                        save_progress_videos=self.video_save_progress_videos_checkbox.GetValue(),
                                        original_with_masks=self.video_with_masks_checkbox.GetValue(),
@@ -822,6 +860,7 @@ class DynamicBackgroundPanel(wx.ScrolledWindow):
 # Run the program
 if __name__ == '__main__':
     app = wx.App()
-    DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='TEST')
-    #DynamicBackgroundInitialWindow('LabGym: Dynamic Background Interface', mode='SAMPLES')
+    DynamicBackgroundInitialWindow("Baker's Dynamic Background Removal Interface", mode='TEST')
+    # DynamicBackgroundInitialWindow("Baker's Dynamic Background Removal Interface", mode='SAMPLES')
+    # DynamicBackgroundInitialWindow("Baker's Dynamic Background Removal Interface", mode='')
     app.MainLoop()
