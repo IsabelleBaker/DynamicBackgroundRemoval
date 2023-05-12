@@ -66,7 +66,9 @@ MPS acceleration is available on MacOS 12.3+:
 pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
 -I have found that training a single animal works fine and is ~40% faster than using only my M1 Max cpu. With multiple animals the loss explodes to infinity and errors. 
+
 -Inferencing seems slower, as of right now, using MPS than just using my M1 Max cpu. That may be different if you don't have a Max cpu. This is *likely* due to torchvision::nms not currently being implemented. Therefore, with every frame it must fallback to CPU for this operation. That's a guess as to what is happening, but right now I still use CPU for inferencing locally. 
+
 -Some videos cause an exception to be thrown from within the model. Again, I think this is due to the immature pytorch code at this time. 
 
 I'll update these observations as I have time to do more testing. Let me know if you think anything else should be noted here about MPS.
